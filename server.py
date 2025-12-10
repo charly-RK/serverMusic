@@ -136,6 +136,7 @@ def health_check():
 if __name__ == '__main__':
     print("🚀 YouTube Download Server Starting...")
     print(f"📁 Download directory: {DOWNLOAD_DIR.absolute()}")
-    print("🌐 Server running on http://0.0.0.0:5001")
+    port = int(os.environ.get('PORT', 5001))
+    print(f"🌐 Server running on http://0.0.0.0:{port}")
     print("💡 Use your PC's IP address to connect from Flutter app")
-    app.run(host='0.0.0.0', port=5001, debug=False)
+    app.run(host='0.0.0.0', port=port, debug=False)
