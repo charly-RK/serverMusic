@@ -12,6 +12,11 @@ CORS(app)  # Enable CORS for Flutter app
 DOWNLOAD_DIR = Path("downloads")
 DOWNLOAD_DIR.mkdir(exist_ok=True)
 
+@app.route('/')
+def index():
+    """Root endpoint"""
+    return jsonify({'message': 'YouTube Download API', 'status': 'running'})
+
 @app.route('/search', methods=['POST'])
 def search_videos():
     """Search YouTube videos"""
@@ -79,7 +84,6 @@ def download_video():
             'quiet': False,
             'no_warnings': False,
             'progress_hooks': [lambda d: print(f"Progress: {d.get('_percent_str', '0%')}")],
-            'ffmpeg_location': 'C:\\ffmpeg\\bin',  # Specify FFmpeg location
         }
         
         # Download
