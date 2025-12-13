@@ -145,42 +145,64 @@ def search_albums():
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': True,
+            'extract_flat': 'in_playlist',
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Search for playlists
-            search_results = ydl.extract_info(f"ytsearch10:{query} album", download=False)
+            # Search specifically for playlists
+            search_query = f"ytsearchplaylist5:{query}"
+            print(f"Searching playlists with query: {search_query}")
+            
+            search_results = ydl.extract_info(search_query, download=False)
             
             albums = []
-            for entry in search_results.get('entries', []):
-                # Try to get playlist info if it's a playlist
-                try:
-                    if 'playlist' in entry.get('url', '').lower() or entry.get('_type') == 'playlist':
-                        playlist_info = ydl.extract_info(entry['url'], download=False)
+            if search_results and 'entries' in search_results:
+                for playlist in search_results.get('entries', []):
+                    if not playlist:
+                        continue
+                    
+                    try:
+                        # Get playlist details
+                        playlist_id = playlist.get('id', '')
+                        title = playlist.get('title', '')
+                        uploader = playlist.get('uploader', '') or playlist.get('channel', '')
                         
-                        # Filter for official albums (check uploader, verified status, etc)
-                        uploader = playlist_info.get('uploader', '').lower()
-                        title = playlist_info.get('title', '').lower()
+                        # Get thumbnail - try different fields
+                        thumbnail = ''
+                        if 'thumbnail' in playlist:
+                            thumbnail = playlist['thumbnail']
+                        elif 'thumbnails' in playlist and len(playlist['thumbnails']) > 0:
+                            thumbnail = playlist['thumbnails'][-1].get('url', '')
                         
-                        # Skip user playlists and non-official content
-                        if any(skip in title for skip in ['mix', 'playlist', 'compilation']) and 'topic' not in uploader:
+                        # Get track count
+                        track_count = playlist.get('playlist_count', 0)
+                        if track_count == 0 and 'entries' in playlist:
+                            track_count = len(playlist['entries'])
+                        
+                        # Skip if essential data is missing
+                        if not playlist_id or not title:
                             continue
                         
+                        print(f"Found playlist: {title} by {uploader} ({track_count} tracks)")
+                        
                         albums.append({
-                            'id': playlist_info.get('id', ''),
-                            'title': playlist_info.get('title', ''),
-                            'thumbnail': playlist_info.get('thumbnail', ''),
-                            'author': playlist_info.get('uploader', ''),
-                            'track_count': len(playlist_info.get('entries', [])),
+                            'id': playlist_id,
+                            'title': title,
+                            'thumbnail': thumbnail,
+                            'author': uploader,
+                            'track_count': track_count,
                         })
-                except:
-                    continue
+                    except Exception as e:
+                        print(f"Error processing playlist: {e}")
+                        continue
             
+            print(f"Returning {len(albums)} albums")
             return jsonify({'results': albums})
     
     except Exception as e:
+        print(f"Error in search_albums: {e}")
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/album_tracks', methods=['POST'])
 def get_album_tracks():
