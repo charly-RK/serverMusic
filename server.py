@@ -132,15 +132,178 @@ def download_file(filename):
         print(f"Error serving file: {e}")
         return jsonify({'error': str(e)}), 500
 
+@app.route('/search_albums', methods=['POST'])
+def search_albums():
+    """Search YouTube albums/playlists (official only)"""
+    try:
+        data = request.json
+        query = data.get('query', '')
+        
+        if not query:
+            return jsonify({'error': 'Query is required'}), 400
+        
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            # Search for playlists
+            search_results = ydl.extract_info(f"ytsearch10:{query} album", download=False)
+            
+            albums = []
+            for entry in search_results.get('entries', []):
+                # Try to get playlist info if it's a playlist
+                try:
+                    if 'playlist' in entry.get('url', '').lower() or entry.get('_type') == 'playlist':
+                        playlist_info = ydl.extract_info(entry['url'], download=False)
+                        
+                        # Filter for official albums (check uploader, verified status, etc)
+                        uploader = playlist_info.get('uploader', '').lower()
+                        title = playlist_info.get('title', '').lower()
+                        
+                        # Skip user playlists and non-official content
+                        if any(skip in title for skip in ['mix', 'playlist', 'compilation']) and 'topic' not in uploader:
+                            continue
+                        
+                        albums.append({
+                            'id': playlist_info.get('id', ''),
+                            'title': playlist_info.get('title', ''),
+                            'thumbnail': playlist_info.get('thumbnail', ''),
+                            'author': playlist_info.get('uploader', ''),
+                            'track_count': len(playlist_info.get('entries', [])),
+                        })
+                except:
+                    continue
+            
+            return jsonify({'results': albums})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/album_tracks', methods=['POST'])
+def get_album_tracks():
+    """Get tracks from a YouTube album/playlist"""
+    try:
+        data = request.json
+        playlist_id = data.get('playlist_id', '')
+        
+        if not playlist_id:
+            return jsonify({'error': 'Playlist ID is required'}), 400
+        
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+            playlist_info = ydl.extract_info(playlist_url, download=False)
+            
+            tracks = []
+            for entry in playlist_info.get('entries', []):
+                if entry:
+                    tracks.append({
+                        'id': entry.get('id', ''),
+                        'title': entry.get('title', ''),
+                        'url': entry.get('url', f"https://www.youtube.com/watch?v={entry.get('id', '')}"),
+                        'thumbnail': entry.get('thumbnail', ''),
+                        'duration': entry.get('duration', 0),
+                        'author': entry.get('uploader', ''),
+                    })
+            
+            return jsonify({'tracks': tracks})
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+@app.route('/download_album', methods=['POST'])
+def download_album():
+    """Download entire album into a dedicated folder"""
+    try:
+        data = request.json
+        playlist_id = data.get('playlist_id', '')
+        album_title = data.get('album_title', 'Album')
+        
+        if not playlist_id:
+            return jsonify({'error': 'Playlist ID is required'}), 400
+        
+        # Sanitize album name for folder
+        safe_album_name = "".join(c for c in album_title if c.isalnum() or c in (' ', '-', '_')).strip()
+        album_folder = DOWNLOAD_DIR / safe_album_name
+        album_folder.mkdir(exist_ok=True)
+        
+        # Get playlist tracks
+        ydl_opts = {
+            'quiet': True,
+            'no_warnings': True,
+            'extract_flat': True,
+        }
+        
+        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+            playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+            playlist_info = ydl.extract_info(playlist_url, download=False)
+            
+            downloaded_files = []
+            total_tracks = len(playlist_info.get('entries', []))
+            
+            # Download each track
+            for idx, entry in enumerate(playlist_info.get('entries', []), 1):
+                if entry:
+                    video_id = entry.get('id', '')
+                    title = entry.get('title', f'Track {idx}')
+                    safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
+                    
+                    output_path = album_folder / f"{safe_title}.mp3"
+                    
+                    # Download options
+                    download_opts = {
+                        'format': 'bestaudio/best',
+                        'postprocessors': [{
+                            'key': 'FFmpegExtractAudio',
+                            'preferredcodec': 'mp3',
+                            'preferredquality': '320',
+                        }],
+                        'outtmpl': str(album_folder / f"{safe_title}.%(ext)s"),
+                        'quiet': False,
+                        'no_warnings': False,
+                    }
+                    
+                    try:
+                        with yt_dlp.YoutubeDL(download_opts) as download_ydl:
+                            download_ydl.download([f"https://www.youtube.com/watch?v={video_id}"])
+                        
+                        if output_path.exists():
+                            downloaded_files.append({
+                                'title': title,
+                                'file_path': f"{safe_album_name}/{safe_title}.mp3",
+                                'progress': f"{idx}/{total_tracks}"
+                            })
+                    except Exception as e:
+                        print(f"Error downloading {title}: {e}")
+                        continue
+            
+            return jsonify({
+                'success': True,
+                'album_folder': safe_album_name,
+                'downloaded_files': downloaded_files,
+                'total_tracks': total_tracks
+            })
+    
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 @app.route('/health', methods=['GET'])
 def health_check():
     """Health check endpoint"""
     return jsonify({'status': 'ok', 'message': 'Server is running'})
 
 if __name__ == '__main__':
-    print("🚀 YouTube Download Server Starting...")
-    print(f"📁 Download directory: {DOWNLOAD_DIR.absolute()}")
+    print("YouTube Download Server Starting...")
+    print(f"Download directory: {DOWNLOAD_DIR.absolute()}")
     port = int(os.environ.get('PORT', 5001))
-    print(f"🌐 Server running on http://0.0.0.0:{port}")
-    print("💡 Use your PC's IP address to connect from Flutter app")
+    print(f"Server running on http://0.0.0.0:{port}")
+    print("Use your PC's IP address to connect from Flutter app")
     app.run(host='0.0.0.0', port=port, debug=False)
