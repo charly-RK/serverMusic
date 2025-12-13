@@ -183,31 +183,41 @@ def search_albums():
                                 item_id = item.get('id', '')
                                 
                                 # Official albums have OLAK5uy_ in their playlist ID
-                                if item_id and ('OLAK5uy_' in item_id or item.get('_type') == 'playlist'):
-                                    title = item.get('title', '')
-                                    uploader = item.get('uploader', '') or item.get('channel', '')
-                                    
-                                    # Get thumbnail
-                                    thumbnail = ''
-                                    if 'thumbnail' in item:
-                                        thumbnail = item['thumbnail']
-                                    elif 'thumbnails' in item and len(item['thumbnails']) > 0:
-                                        thumbnail = item['thumbnails'][-1].get('url', '')
-                                    
-                                    # Get track count
-                                    track_count = item.get('playlist_count', 0)
-                                    if track_count == 0 and 'entries' in item:
-                                        track_count = len(item['entries'])
-                                    
-                                    if title and item_id:
-                                        print(f"Found official album: {title} ({track_count} tracks)")
-                                        albums.append({
-                                            'id': item_id,
-                                            'title': title,
-                                            'thumbnail': thumbnail,
-                                            'author': uploader,
-                                            'track_count': track_count,
-                                        })
+                                if item_id and 'OLAK5uy_' in item_id:
+                                    try:
+                                        # Extract full playlist info to get track count
+                                        playlist_url = f"https://www.youtube.com/playlist?list={item_id}"
+                                        print(f"Extracting playlist: {playlist_url}")
+                                        
+                                        playlist_info = ydl.extract_info(playlist_url, download=False)
+                                        
+                                        if playlist_info:
+                                            title = playlist_info.get('title', '')
+                                            uploader = playlist_info.get('uploader', '') or playlist_info.get('channel', '')
+                                            
+                                            # Get thumbnail
+                                            thumbnail = ''
+                                            if 'thumbnail' in playlist_info:
+                                                thumbnail = playlist_info['thumbnail']
+                                            elif 'thumbnails' in playlist_info and len(playlist_info['thumbnails']) > 0:
+                                                thumbnail = playlist_info['thumbnails'][-1].get('url', '')
+                                            
+                                            # Get accurate track count from entries
+                                            track_count = len(playlist_info.get('entries', []))
+                                            
+                                            if title and track_count > 0:
+                                                print(f"Found official album: {title} ({track_count} tracks)")
+                                                albums.append({
+                                                    'id': item_id,
+                                                    'title': title,
+                                                    'thumbnail': thumbnail,
+                                                    'author': uploader,
+                                                    'track_count': track_count,
+                                                })
+                                    except Exception as e:
+                                        print(f"Error extracting playlist {item_id}: {e}")
+                                        continue
+
                     except Exception as e:
                         print(f"Error extracting channel releases: {e}")
                         import traceback
