@@ -145,64 +145,107 @@ def search_albums():
         ydl_opts = {
             'quiet': True,
             'no_warnings': True,
-            'extract_flat': 'in_playlist',
+            'extract_flat': True,
         }
         
+        albums = []
+        
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Search specifically for playlists
-            search_query = f"ytsearchplaylist5:{query}"
-            print(f"Searching playlists with query: {search_query}")
-            
-            search_results = ydl.extract_info(search_query, download=False)
-            
-            albums = []
-            if search_results and 'entries' in search_results:
-                for playlist in search_results.get('entries', []):
-                    if not playlist:
-                        continue
-                    
-                    try:
-                        # Get playlist details
-                        playlist_id = playlist.get('id', '')
-                        title = playlist.get('title', '')
-                        uploader = playlist.get('uploader', '') or playlist.get('channel', '')
-                        
-                        # Get thumbnail - try different fields
-                        thumbnail = ''
-                        if 'thumbnail' in playlist:
-                            thumbnail = playlist['thumbnail']
-                        elif 'thumbnails' in playlist and len(playlist['thumbnails']) > 0:
-                            thumbnail = playlist['thumbnails'][-1].get('url', '')
-                        
-                        # Get track count
-                        track_count = playlist.get('playlist_count', 0)
-                        if track_count == 0 and 'entries' in playlist:
-                            track_count = len(playlist['entries'])
-                        
-                        # Skip if essential data is missing
-                        if not playlist_id or not title:
+            # Strategy 1: Search for "Artist - Topic" channel which has official albums
+            try:
+                topic_query = f"ytsearch5:{query} topic albums"
+                print(f"Searching with query: {topic_query}")
+                search_results = ydl.extract_info(topic_query, download=False)
+                
+                if search_results and 'entries' in search_results:
+                    for entry in search_results.get('entries', []):
+                        if not entry:
                             continue
                         
-                        print(f"Found playlist: {title} by {uploader} ({track_count} tracks)")
+                        # Check if this is a playlist/album
+                        url = entry.get('url', '')
+                        webpage_url = entry.get('webpage_url', '')
                         
-                        albums.append({
-                            'id': playlist_id,
-                            'title': title,
-                            'thumbnail': thumbnail,
-                            'author': uploader,
-                            'track_count': track_count,
-                        })
-                    except Exception as e:
-                        print(f"Error processing playlist: {e}")
-                        continue
+                        # If it's a playlist URL, extract it
+                        if 'playlist' in url or 'playlist' in webpage_url:
+                            try:
+                                playlist_url = webpage_url if 'playlist' in webpage_url else url
+                                playlist_info = ydl.extract_info(playlist_url, download=False)
+                                
+                                if playlist_info:
+                                    playlist_id = playlist_info.get('id', '')
+                                    title = playlist_info.get('title', '')
+                                    uploader = playlist_info.get('uploader', '') or playlist_info.get('channel', '')
+                                    
+                                    # Get thumbnail
+                                    thumbnail = ''
+                                    if 'thumbnail' in playlist_info:
+                                        thumbnail = playlist_info['thumbnail']
+                                    elif 'thumbnails' in playlist_info and len(playlist_info['thumbnails']) > 0:
+                                        thumbnail = playlist_info['thumbnails'][-1].get('url', '')
+                                    
+                                    # Get track count
+                                    track_count = len(playlist_info.get('entries', []))
+                                    
+                                    if playlist_id and title and track_count > 0:
+                                        print(f"Found album: {title} by {uploader} ({track_count} tracks)")
+                                        albums.append({
+                                            'id': playlist_id,
+                                            'title': title,
+                                            'thumbnail': thumbnail,
+                                            'author': uploader,
+                                            'track_count': track_count,
+                                        })
+                            except Exception as e:
+                                print(f"Error extracting playlist: {e}")
+                                continue
+            except Exception as e:
+                print(f"Error in topic search: {e}")
+            
+            # Strategy 2: Direct search for album playlists
+            if len(albums) < 3:
+                try:
+                    album_query = f"ytsearch10:{query} full album playlist"
+                    print(f"Searching with query: {album_query}")
+                    search_results = ydl.extract_info(album_query, download=False)
+                    
+                    if search_results and 'entries' in search_results:
+                        for entry in search_results.get('entries', []):
+                            if not entry:
+                                continue
+                            
+                            # Check if video title suggests it's an album
+                            title = entry.get('title', '').lower()
+                            if 'full album' in title or 'álbum completo' in title or 'album completo' in title:
+                                video_id = entry.get('id', '')
+                                video_title = entry.get('title', '')
+                                uploader = entry.get('uploader', '') or entry.get('channel', '')
+                                thumbnail = entry.get('thumbnail', '')
+                                
+                                if video_id and video_title:
+                                    print(f"Found album video: {video_title} by {uploader}")
+                                    # Use video as single-track "album"
+                                    albums.append({
+                                        'id': video_id,
+                                        'title': video_title,
+                                        'thumbnail': thumbnail,
+                                        'author': uploader,
+                                        'track_count': 1,
+                                    })
+                                    
+                                    if len(albums) >= 5:
+                                        break
+                except Exception as e:
+                    print(f"Error in album search: {e}")
             
             print(f"Returning {len(albums)} albums")
             return jsonify({'results': albums})
     
     except Exception as e:
         print(f"Error in search_albums: {e}")
+        import traceback
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500
-
 
 @app.route('/album_tracks', methods=['POST'])
 def get_album_tracks():
