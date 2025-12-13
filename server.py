@@ -151,62 +151,78 @@ def search_albums():
         albums = []
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-            # Strategy 1: Search for "Artist - Topic" channel which has official albums
+            # Search for the artist's channel
             try:
-                topic_query = f"ytsearch5:{query} topic albums"
-                print(f"Searching with query: {topic_query}")
-                search_results = ydl.extract_info(topic_query, download=False)
+                # First, find the artist's channel
+                channel_query = f"ytsearch1:{query} official"
+                print(f"Searching for channel: {channel_query}")
+                search_results = ydl.extract_info(channel_query, download=False)
                 
+                channel_url = None
                 if search_results and 'entries' in search_results:
-                    for entry in search_results.get('entries', []):
-                        if not entry:
-                            continue
+                    first_result = search_results['entries'][0]
+                    if first_result:
+                        # Get channel URL from the video
+                        channel_id = first_result.get('channel_id', '')
+                        if channel_id:
+                            channel_url = f"https://www.youtube.com/channel/{channel_id}/releases"
+                            print(f"Found channel: {channel_url}")
+                
+                # If we found a channel, extract albums from releases
+                if channel_url:
+                    try:
+                        print(f"Extracting releases from: {channel_url}")
+                        channel_info = ydl.extract_info(channel_url, download=False)
                         
-                        # Check if this is a playlist/album
-                        url = entry.get('url', '')
-                        webpage_url = entry.get('webpage_url', '')
-                        
-                        # If it's a playlist URL, extract it
-                        if 'playlist' in url or 'playlist' in webpage_url:
-                            try:
-                                playlist_url = webpage_url if 'playlist' in webpage_url else url
-                                playlist_info = ydl.extract_info(playlist_url, download=False)
+                        if channel_info and 'entries' in channel_info:
+                            for item in channel_info['entries'][:10]:  # Limit to 10 albums
+                                if not item:
+                                    continue
                                 
-                                if playlist_info:
-                                    playlist_id = playlist_info.get('id', '')
-                                    title = playlist_info.get('title', '')
-                                    uploader = playlist_info.get('uploader', '') or playlist_info.get('channel', '')
+                                # Check if it's a playlist (album)
+                                item_id = item.get('id', '')
+                                
+                                # Official albums have OLAK5uy_ in their playlist ID
+                                if item_id and ('OLAK5uy_' in item_id or item.get('_type') == 'playlist'):
+                                    title = item.get('title', '')
+                                    uploader = item.get('uploader', '') or item.get('channel', '')
                                     
                                     # Get thumbnail
                                     thumbnail = ''
-                                    if 'thumbnail' in playlist_info:
-                                        thumbnail = playlist_info['thumbnail']
-                                    elif 'thumbnails' in playlist_info and len(playlist_info['thumbnails']) > 0:
-                                        thumbnail = playlist_info['thumbnails'][-1].get('url', '')
+                                    if 'thumbnail' in item:
+                                        thumbnail = item['thumbnail']
+                                    elif 'thumbnails' in item and len(item['thumbnails']) > 0:
+                                        thumbnail = item['thumbnails'][-1].get('url', '')
                                     
                                     # Get track count
-                                    track_count = len(playlist_info.get('entries', []))
+                                    track_count = item.get('playlist_count', 0)
+                                    if track_count == 0 and 'entries' in item:
+                                        track_count = len(item['entries'])
                                     
-                                    if playlist_id and title and track_count > 0:
-                                        print(f"Found album: {title} by {uploader} ({track_count} tracks)")
+                                    if title and item_id:
+                                        print(f"Found official album: {title} ({track_count} tracks)")
                                         albums.append({
-                                            'id': playlist_id,
+                                            'id': item_id,
                                             'title': title,
                                             'thumbnail': thumbnail,
                                             'author': uploader,
                                             'track_count': track_count,
                                         })
-                            except Exception as e:
-                                print(f"Error extracting playlist: {e}")
-                                continue
+                    except Exception as e:
+                        print(f"Error extracting channel releases: {e}")
+                        import traceback
+                        traceback.print_exc()
             except Exception as e:
-                print(f"Error in topic search: {e}")
+                print(f"Error finding channel: {e}")
+                import traceback
+                traceback.print_exc()
             
-            # Strategy 2: Direct search for album playlists
-            if len(albums) < 3:
+            # Fallback: Search for official album playlists directly
+            if len(albums) == 0:
                 try:
-                    album_query = f"ytsearch10:{query} full album playlist"
-                    print(f"Searching with query: {album_query}")
+                    # Search for playlists with OLAK identifier (official albums)
+                    album_query = f"ytsearch10:{query} OLAK5uy"
+                    print(f"Fallback search: {album_query}")
                     search_results = ydl.extract_info(album_query, download=False)
                     
                     if search_results and 'entries' in search_results:
@@ -214,29 +230,53 @@ def search_albums():
                             if not entry:
                                 continue
                             
-                            # Check if video title suggests it's an album
-                            title = entry.get('title', '').lower()
-                            if 'full album' in title or 'álbum completo' in title or 'album completo' in title:
-                                video_id = entry.get('id', '')
-                                video_title = entry.get('title', '')
-                                uploader = entry.get('uploader', '') or entry.get('channel', '')
-                                thumbnail = entry.get('thumbnail', '')
+                            # Check if URL contains playlist
+                            url = entry.get('url', '')
+                            webpage_url = entry.get('webpage_url', '')
+                            
+                            if 'OLAK5uy_' in url or 'OLAK5uy_' in webpage_url or 'list=' in webpage_url:
+                                # Extract playlist ID from URL
+                                playlist_id = None
+                                if 'list=' in webpage_url:
+                                    playlist_id = webpage_url.split('list=')[1].split('&')[0]
                                 
-                                if video_id and video_title:
-                                    print(f"Found album video: {video_title} by {uploader}")
-                                    # Use video as single-track "album"
-                                    albums.append({
-                                        'id': video_id,
-                                        'title': video_title,
-                                        'thumbnail': thumbnail,
-                                        'author': uploader,
-                                        'track_count': 1,
-                                    })
-                                    
-                                    if len(albums) >= 5:
-                                        break
+                                if playlist_id and 'OLAK5uy_' in playlist_id:
+                                    try:
+                                        playlist_url = f"https://www.youtube.com/playlist?list={playlist_id}"
+                                        playlist_info = ydl.extract_info(playlist_url, download=False)
+                                        
+                                        if playlist_info:
+                                            title = playlist_info.get('title', '')
+                                            uploader = playlist_info.get('uploader', '') or playlist_info.get('channel', '')
+                                            
+                                            # Get thumbnail
+                                            thumbnail = ''
+                                            if 'thumbnail' in playlist_info:
+                                                thumbnail = playlist_info['thumbnail']
+                                            elif 'thumbnails' in playlist_info and len(playlist_info['thumbnails']) > 0:
+                                                thumbnail = playlist_info['thumbnails'][-1].get('url', '')
+                                            
+                                            track_count = len(playlist_info.get('entries', []))
+                                            
+                                            if title and track_count > 0:
+                                                print(f"Found official album (fallback): {title} ({track_count} tracks)")
+                                                albums.append({
+                                                    'id': playlist_id,
+                                                    'title': title,
+                                                    'thumbnail': thumbnail,
+                                                    'author': uploader,
+                                                    'track_count': track_count,
+                                                })
+                                                
+                                                if len(albums) >= 5:
+                                                    break
+                                    except Exception as e:
+                                        print(f"Error extracting playlist: {e}")
+                                        continue
                 except Exception as e:
-                    print(f"Error in album search: {e}")
+                    print(f"Error in fallback search: {e}")
+                    import traceback
+                    traceback.print_exc()
             
             print(f"Returning {len(albums)} albums")
             return jsonify({'results': albums})
@@ -246,6 +286,7 @@ def search_albums():
         import traceback
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
+
 
 @app.route('/album_tracks', methods=['POST'])
 def get_album_tracks():
