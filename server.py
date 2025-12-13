@@ -72,14 +72,25 @@ def download_video():
         safe_title = "".join(c for c in title if c.isalnum() or c in (' ', '-', '_')).strip()
         output_path = DOWNLOAD_DIR / f"{safe_title}.mp3"
         
-        # yt-dlp options for MP3 download
+        # yt-dlp options for MP3 download with metadata and artwork
         ydl_opts = {
             'format': 'bestaudio/best',
-            'postprocessors': [{
-                'key': 'FFmpegExtractAudio',
-                'preferredcodec': 'mp3',
-                'preferredquality': '320',
-            }],
+            'postprocessors': [
+                {
+                    'key': 'FFmpegExtractAudio',
+                    'preferredcodec': 'mp3',
+                    'preferredquality': '320',
+                },
+                {
+                    'key': 'FFmpegMetadata',
+                    'add_metadata': True,
+                },
+                {
+                    'key': 'EmbedThumbnail',
+                    'already_have_thumbnail': False,
+                }
+            ],
+            'writethumbnail': True,  # Download thumbnail
             'outtmpl': str(DOWNLOAD_DIR / f"{safe_title}.%(ext)s"),
             'quiet': False,
             'no_warnings': False,
@@ -374,14 +385,25 @@ def download_album():
                     
                     output_path = album_folder / f"{safe_title}.mp3"
                     
-                    # Download options
+                    # Download options with metadata and artwork
                     download_opts = {
                         'format': 'bestaudio/best',
-                        'postprocessors': [{
-                            'key': 'FFmpegExtractAudio',
-                            'preferredcodec': 'mp3',
-                            'preferredquality': '320',
-                        }],
+                        'postprocessors': [
+                            {
+                                'key': 'FFmpegExtractAudio',
+                                'preferredcodec': 'mp3',
+                                'preferredquality': '320',
+                            },
+                            {
+                                'key': 'FFmpegMetadata',
+                                'add_metadata': True,
+                            },
+                            {
+                                'key': 'EmbedThumbnail',
+                                'already_have_thumbnail': False,
+                            }
+                        ],
+                        'writethumbnail': True,  # Download thumbnail
                         'outtmpl': str(album_folder / f"{safe_title}.%(ext)s"),
                         'quiet': False,
                         'no_warnings': False,
