@@ -31,7 +31,7 @@ def search_videos():
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,
-            'cookiesfrombrowser': ('chrome',),
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -96,7 +96,7 @@ def download_video():
             'quiet': False,
             'no_warnings': False,
             'progress_hooks': [lambda d: print(f"Progress: {d.get('_percent_str', '0%')}")],
-            'cookiesfrombrowser': ('chrome',),  # Use Chrome cookies to bypass bot detection
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         }
         
         # Download
@@ -159,7 +159,7 @@ def search_albums():
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,
-            'cookiesfrombrowser': ('chrome',),
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         }
         
         albums = []
@@ -326,7 +326,7 @@ def get_album_tracks():
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,
-            'cookiesfrombrowser': ('chrome',),
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -371,7 +371,7 @@ def download_album():
             'quiet': True,
             'no_warnings': True,
             'extract_flat': True,
-            'cookiesfrombrowser': ('chrome',),
+            'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
         }
         
         with yt_dlp.YoutubeDL(ydl_opts) as ydl:
@@ -412,7 +412,7 @@ def download_album():
                         'outtmpl': str(album_folder / f"{safe_title}.%(ext)s"),
                         'quiet': False,
                         'no_warnings': False,
-                        'cookiesfrombrowser': ('chrome',),
+                        'extractor_args': {'youtube': {'player_client': ['android', 'web']}},
                     }
                     
                     try:
